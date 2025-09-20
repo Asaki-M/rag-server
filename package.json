@@ -1,0 +1,45 @@
+{
+  "name": "rag-server",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "知识库服务",
+  "author": "",
+  "license": "MIT",
+  "keywords": [
+    "rag",
+    "langchain"
+  ],
+  "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rimraf dist/ && tsc",
+    "start": "node dist/index.js",
+    "dev": "rimraf dist/ && tsc && node dist/index.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "dependencies": {
+    "@langchain/community": "^0.3.53",
+    "@langchain/core": "^0.3.72",
+    "@langchain/openai": "^0.5.18",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^4.21.2",
+    "get-port": "^7.1.0",
+    "langchain": "^0.3.31",
+    "uuid": "^11.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^5.2.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.14.1",
+    "@types/uuid": "^10.0.0",
+    "eslint": "^9.34.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.8.3"
+  }
+}
