@@ -1,1 +1,2 @@
-// 控制器层
+export * from './knowledgeBase.js'
+export * from './splitText.js'

@@ -1,1 +1,1 @@
-// 服务层
+export * from './knowledgeBase.js'
