@@ -1,6 +1,7 @@
 import type { Document } from '@langchain/core/documents'
+import { Chroma } from '@langchain/community/vectorstores/chroma'
 import { OpenAIEmbeddings } from '@langchain/openai'
-import { MemoryVectorStore } from 'langchain/vectorstores/memory'
+import { CloudClient } from 'chromadb'
 import { v4 as uuidv4 } from 'uuid'
 
 import config from '../config/index.js'
@@ -12,7 +13,8 @@ export interface KnowledgeBaseRecord {
   id: string
   name: string
   description?: string
-  vectorStore: MemoryVectorStore
+  collectionName: string
+  vectorStore: Chroma
   createdAt: Date
   updatedAt: Date
   chunkCount: number
@@ -46,6 +48,12 @@ class KnowledgeBaseService {
     model: config.openai.embeddingModel,
   })
 
+  private readonly chromaClient = new CloudClient({
+    apiKey: config.chroma.apiKey,
+    tenant: config.chroma.tenant,
+    database: config.chroma.database,
+  })
+
   async createKnowledgeBase(params: CreateKnowledgeBaseParams): Promise<KnowledgeBaseSummary> {
     const { name, description, documents = [] } = params
 
@@ -55,12 +63,23 @@ class KnowledgeBaseService {
 
     const id = uuidv4()
     const now = new Date()
+    const collectionName = this.buildCollectionName(id)
 
-    const vectorStore = new MemoryVectorStore(this.embeddings)
+    const vectorStore = new Chroma(this.embeddings, {
+      index: this.chromaClient,
+      collectionName,
+      collectionMetadata: {
+        knowledgeBaseId: id,
+        knowledgeBaseName: name,
+      },
+    })
+
+    await vectorStore.ensureCollection()
 
     const record: KnowledgeBaseRecord = {
       id,
       name,
+      collectionName,
       vectorStore,
       createdAt: now,
       updatedAt: now,
@@ -111,6 +130,10 @@ class KnowledgeBaseService {
 
   getKnowledgeBase(id: string): KnowledgeBaseRecord | undefined {
     return this.knowledgeBases.get(id)
+  }
+
+  private buildCollectionName(id: string): string {
+    return `kb_${id}`
   }
 
   private prepareDocuments(documents: Document[], startIndex: number): Document[] {
