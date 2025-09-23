@@ -1,6 +1,7 @@
 import type { Document } from '@langchain/core/documents'
+import { TaskType } from '@google/generative-ai'
 import { Chroma } from '@langchain/community/vectorstores/chroma'
-import { OpenAIEmbeddings } from '@langchain/openai'
+import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai'
 import { CloudClient } from 'chromadb'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -43,9 +44,10 @@ export interface KnowledgeBaseSummary {
 class KnowledgeBaseService {
   private readonly knowledgeBases = new Map<string, KnowledgeBaseRecord>()
 
-  private readonly embeddings = new OpenAIEmbeddings({
-    apiKey: config.openai.apiKey,
-    model: config.openai.embeddingModel,
+  private readonly embeddings = new GoogleGenerativeAIEmbeddings({
+    apiKey: config.google.apiKey,
+    model: config.google.embeddingModel,
+    taskType: TaskType.RETRIEVAL_DOCUMENT,
   })
 
   private readonly chromaClient = new CloudClient({

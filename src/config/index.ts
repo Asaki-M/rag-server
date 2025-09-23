@@ -6,7 +6,7 @@ dotenv.config()
 
 interface Config {
   port: number
-  openai: {
+  google: {
     apiKey: string
     embeddingModel: string
   }
@@ -19,9 +19,9 @@ interface Config {
 
 const config: Config = {
   port: Number.parseInt(process.env['PORT'] ?? '3008', 10),
-  openai: {
-    apiKey: process.env['OPENAI_API_KEY'] ?? '',
-    embeddingModel: process.env['OPENAI_EMBEDDING_MODEL'] ?? 'text-embedding-3-large',
+  google: {
+    apiKey: process.env['GOOGLE_API_KEY'] ?? '',
+    embeddingModel: process.env['GOOGLE_EMBEDINNG_MODEL'] ?? 'gemini-embedding-001',
   },
   chroma: {
     apiKey: process.env['CHROMA_API_KEY'] ?? '',
@@ -32,8 +32,8 @@ const config: Config = {
 
 // 验证必需的配置
 export function validateConfig(): void {
-  if (!config.openai.apiKey) {
-    throw new Error('OPENAI_API_KEY 未配置')
+  if (!config.google.apiKey) {
+    throw new Error('GOOGLE_API_KEY 未配置')
   }
 
   if (!config.chroma.apiKey || !config.chroma.tenant || !config.chroma.database) {
