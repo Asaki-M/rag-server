@@ -29,7 +29,7 @@ app.use(cors())
 app.options('*', cors())
 
 // 路由
-app.use('/', routes)
+app.use('/api', routes)
 
 // 404 处理
 app.use(notFoundHandler)

@@ -2,7 +2,6 @@ import type { Document } from '@langchain/core/documents'
 import type { Collection } from 'chromadb'
 import type { CreateKnowledgeCollectionParams, UpdateKnowledgeCollectionParams } from '../types/index.js'
 import { TaskType } from '@google/generative-ai'
-import { Chroma } from '@langchain/community/vectorstores/chroma'
 import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai'
 import { CloudClient } from 'chromadb'
 
