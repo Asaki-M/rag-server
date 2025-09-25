@@ -1,49 +1,17 @@
 import type { Document } from '@langchain/core/documents'
+import type { Collection } from 'chromadb'
+import type { CreateKnowledgeCollectionParams, UpdateKnowledgeCollectionParams } from '../types/index.js'
 import { TaskType } from '@google/generative-ai'
 import { Chroma } from '@langchain/community/vectorstores/chroma'
 import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai'
 import { CloudClient } from 'chromadb'
-import { v4 as uuidv4 } from 'uuid'
 
+import { v4 as uuidv4 } from 'uuid'
 import config from '../config/index.js'
 import { createLogger } from '../utils/logger.js'
 
 const logger = createLogger('KnowledgeBaseService')
-
-export interface KnowledgeBaseRecord {
-  id: string
-  name: string
-  description?: string
-  collectionName: string
-  vectorStore: Chroma
-  createdAt: Date
-  updatedAt: Date
-  chunkCount: number
-}
-
-export interface CreateKnowledgeBaseParams {
-  name: string
-  description?: string
-  documents?: Document[]
-}
-
-export interface IngestDocumentsParams {
-  knowledgeBaseId: string
-  documents: Document[]
-}
-
-export interface KnowledgeBaseSummary {
-  id: string
-  name: string
-  description?: string
-  chunkCount: number
-  createdAt: string
-  updatedAt: string
-}
-
 class KnowledgeBaseService {
-  private readonly knowledgeBases = new Map<string, KnowledgeBaseRecord>()
-
   private readonly embeddings = new GoogleGenerativeAIEmbeddings({
     apiKey: config.google.apiKey,
     model: config.google.embeddingModel,
@@ -56,110 +24,122 @@ class KnowledgeBaseService {
     database: config.chroma.database,
   })
 
-  async createKnowledgeBase(params: CreateKnowledgeBaseParams): Promise<KnowledgeBaseSummary> {
-    const { name, description, documents = [] } = params
-
-    if (!name) {
-      throw new Error('知识库名称不能为空')
-    }
-
+  private buildCollectionName = (name: string): string => {
     const id = uuidv4()
+    return `${name}_${id}`
+  }
+
+  async createKnowledgeBase(params: CreateKnowledgeCollectionParams): Promise<boolean> {
+    const { name, description } = params
+
     const now = new Date()
-    const collectionName = this.buildCollectionName(id)
 
-    const vectorStore = new Chroma(this.embeddings, {
-      index: this.chromaClient,
-      collectionName,
-      collectionMetadata: {
-        knowledgeBaseId: id,
-        knowledgeBaseName: name,
-      },
-    })
+    try {
+      await this.chromaClient.createCollection({
+        name: this.buildCollectionName(name),
+        metadata: {
+          name,
+          created: now.toString(),
+          description: description ?? '',
+        },
+        embeddingFunction: {
+          generate: async (texts: string[]) => {
+            return this.embeddings.embedDocuments(texts)
+          },
+        },
+      })
+      logger.log(`${name} 知识库集合创建成功.`)
+      return true
+    }
+    catch (error) {
+      logger.error(`${name} 知识库集合创建失败`, error)
+      return false
+    }
+  }
 
-    await vectorStore.ensureCollection()
+  async queryKnowledgeCollections(): Promise<Collection[]> {
+    try {
+      return await this.chromaClient.listCollections()
+    }
+    catch (error) {
+      logger.error('知识库集合获取失败', error)
+      return []
+    }
+  }
 
-    const record: KnowledgeBaseRecord = {
-      id,
-      name,
-      collectionName,
-      vectorStore,
-      createdAt: now,
-      updatedAt: now,
-      chunkCount: 0,
-      ...(description ? { description } : {}),
+  async updateKnowledgeBase(params: UpdateKnowledgeCollectionParams): Promise<boolean> {
+    const { name, newName, newDescription } = params
+
+    if (!newName && !newDescription) {
+      logger.log('没有提供新的名称或描述，无需更新。')
+      return true
     }
 
-    this.knowledgeBases.set(id, record)
+    try {
+      const collection = await this.chromaClient.getCollection({ name })
+      const oldMetadata = collection.metadata ?? {}
+      const newMetadata: Record<string, any> = { ...oldMetadata }
 
-    if (documents.length > 0) {
-      const preparedDocuments = this.prepareDocuments(documents, 0)
-      await vectorStore.addDocuments(preparedDocuments)
+      if (newName)
+        newMetadata['name'] = newName
 
-      record.chunkCount = preparedDocuments.length
-      record.updatedAt = new Date()
+      if (newDescription)
+        newMetadata['description'] = newDescription
 
-      logger.info(`知识库 ${id} 已写入 ${record.chunkCount} 个文本分块`)
+      await collection.modify({ metadata: newMetadata })
+
+      logger.log(`${name} 知识库集合修改成功.`)
+      return true
     }
-
-    logger.info(`知识库 ${id} 创建成功`)
-
-    return this.toSummary(record)
-  }
-
-  async ingestDocuments(params: IngestDocumentsParams): Promise<KnowledgeBaseSummary> {
-    const { knowledgeBaseId, documents } = params
-
-    if (!documents.length) {
-      throw new Error('没有可写入的文档')
+    catch (error) {
+      logger.error(`${name} 知识库集合修改失败`, error)
+      return false
     }
+  }
 
-    const record = this.knowledgeBases.get(knowledgeBaseId)
-
-    if (!record) {
-      throw new Error(`知识库 ${knowledgeBaseId} 不存在`)
+  async deleteKnowledgeBase(collectionName: string): Promise<boolean> {
+    try {
+      await this.chromaClient.deleteCollection({ name: collectionName })
+      logger.log(`${collectionName} 知识库集合删除成功.`)
+      return true
     }
-
-    const preparedDocuments = this.prepareDocuments(documents, record.chunkCount)
-    await record.vectorStore.addDocuments(preparedDocuments)
-
-    record.chunkCount += preparedDocuments.length
-    record.updatedAt = new Date()
-
-    logger.info(`知识库 ${knowledgeBaseId} 新增 ${preparedDocuments.length} 个文本分块，总计 ${record.chunkCount}`)
-
-    return this.toSummary(record)
+    catch (error) {
+      logger.error(`${collectionName} 知识库集合删除失败`, error)
+      return false
+    }
   }
 
-  getKnowledgeBase(id: string): KnowledgeBaseRecord | undefined {
-    return this.knowledgeBases.get(id)
-  }
-
-  private buildCollectionName(id: string): string {
-    return `kb_${id}`
-  }
-
-  private prepareDocuments(documents: Document[], startIndex: number): Document[] {
-    return documents.map((document, index) => {
-      document.id = document.id ?? uuidv4()
-      const metadata = { ...document.metadata }
-      const currentChunkIndex = metadata['chunkIndex'] as number | undefined
-      metadata['chunkIndex'] = currentChunkIndex ?? startIndex + index
-      document.metadata = metadata
-
-      return document
-    })
-  }
-
-  private toSummary(record: KnowledgeBaseRecord): KnowledgeBaseSummary {
-    return {
-      id: record.id,
-      name: record.name,
-      chunkCount: record.chunkCount,
-      createdAt: record.createdAt.toISOString(),
-      updatedAt: record.updatedAt.toISOString(),
-      ...(record.description ? { description: record.description } : {}),
+  async addDocumentsToKnowledgeBase(collectionName: string, documents: Document[]): Promise<boolean> {
+    try {
+      const collection = await this.chromaClient.getCollection({
+        name: collectionName,
+        embeddingFunction: {
+          generate: async (texts: string[]) => {
+            return this.embeddings.embedDocuments(texts)
+          },
+        },
+      })
+      await collection.add({
+        ids: documents.map(() => uuidv4()),
+        metadatas: documents.map((doc) => {
+          if (Object.keys(doc.metadata).length === 0) {
+            return {
+              ...doc.metadata,
+              createdAt: new Date().toISOString(),
+            }
+          }
+          return doc.metadata
+        }),
+        documents: documents.map(doc => doc.pageContent),
+      })
+      logger.log(`成功将文档添加到 ${collectionName} 知识库集合。`)
+      return true
+    }
+    catch (error) {
+      logger.error(`无法将文档添加到 ${collectionName} 知识库集合。`, error)
+      return false
     }
   }
 }
 
-export const knowledgeBaseService = new KnowledgeBaseService()
+export default new KnowledgeBaseService()
