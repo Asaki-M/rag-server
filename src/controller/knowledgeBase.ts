@@ -98,3 +98,52 @@ export async function addDocumentsToKnowledgeBase(req: Request, res: Response, n
     next(error)
   }
 }
+
+export async function searchDocuments(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { collectionName } = req.params
+    if (!collectionName) {
+      res.status(400).send({ msg: '知识库名称不能为空' })
+      return
+    }
+
+    const { query, k = 5, filter } = req.body
+    if (!query || typeof query !== 'string') {
+      res.status(400).send({ msg: '查询内容不能为空' })
+      return
+    }
+
+    const documents = await knowledgeBaseService.searchSimilarDocuments(collectionName, query, k, filter)
+    res.status(200).json({
+      success: true,
+      documents,
+    })
+  }
+  catch (error) {
+    next(error)
+  }
+}
+
+export async function deleteDocuments(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { collectionName } = req.params
+    if (!collectionName) {
+      res.status(400).send({ msg: '知识库名称不能为空' })
+      return
+    }
+
+    const { ids } = req.body
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).send({ msg: '文档ID列表不能为空' })
+      return
+    }
+
+    const deleteSuccess = await knowledgeBaseService.deleteDocuments(collectionName, ids)
+    res.status(200).json({
+      success: deleteSuccess,
+    })
+  }
+  catch (error) {
+    next(error)
+  }
+}

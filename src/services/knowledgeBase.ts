@@ -17,14 +17,12 @@ const logger = createLogger('KnowledgeBaseService')
  * 基于 LangChain 和 ChromaDB 实现向量存储和相似性搜索
  */
 class KnowledgeBaseService {
-  // Google 嵌入模型实例，用于将文本转换为向量
   private readonly embeddings = new GoogleGenerativeAIEmbeddings({
     apiKey: config.google.apiKey,
     model: config.google.embeddingModel,
     taskType: TaskType.RETRIEVAL_DOCUMENT, // 设置为文档检索任务类型
   })
 
-  // ChromaDB 云客户端，用于直接操作集合
   private readonly chromaClient = new CloudClient({
     apiKey: config.chroma.apiKey,
     tenant: config.chroma.tenant,
@@ -61,6 +59,10 @@ class KnowledgeBaseService {
     const vectorStore = new Chroma(this.embeddings, {
       collectionName,
       chromaCloudAPIKey: config.chroma.apiKey,
+      clientParams: {
+        tenant: config.chroma.tenant,
+        database: config.chroma.database,
+      },
     })
 
     // 将实例存入缓存
@@ -87,12 +89,6 @@ class KnowledgeBaseService {
           name, // 用户提供的知识库名称
           created: now.toISOString(), // 创建时间
           description: description ?? '', // 知识库描述
-        },
-        embeddingFunction: {
-          // 定义嵌入函数，将文本转换为向量
-          generate: async (texts: string[]) => {
-            return this.embeddings.embedDocuments(texts)
-          },
         },
       })
 
@@ -226,8 +222,6 @@ class KnowledgeBaseService {
     }
   }
 
-  // ========== 新增方法：利用 LangChain 向量存储的高级功能 ==========
-
   /**
    * 搜索相似文档
    * 根据查询文本在知识库中找到最相似的文档
@@ -245,27 +239,6 @@ class KnowledgeBaseService {
     }
     catch (error) {
       logger.error('相似文档搜索失败', error)
-      return []
-    }
-  }
-
-  /**
-   * 搜索相似文档（带相似度分数）
-   * 不仅返回相似文档，还包含每个文档的相似度分数
-   * @param collectionName 集合名称
-   * @param query 查询文本
-   * @param k 返回文档数量，默认 5 个
-   * @param filter 可选的过滤条件
-   * @returns 包含文档和相似度分数的数组
-   */
-  async searchSimilarDocumentsWithScore(collectionName: string, query: string, k: number = 5, filter?: Record<string, any>): Promise<[Document, number][]> {
-    try {
-      const vectorStore = await this.getVectorStore(collectionName)
-      // 返回文档及其相似度分数，便于判断相关性强度
-      return await vectorStore.similaritySearchWithScore(query, k, filter)
-    }
-    catch (error) {
-      logger.error('带分数的相似文档搜索失败', error)
       return []
     }
   }
@@ -290,24 +263,6 @@ class KnowledgeBaseService {
       logger.error(`从 ${collectionName} 删除文档失败`, error)
       return false
     }
-  }
-
-  /**
-   * 获取检索器
-   * 创建一个 LangChain 检索器，可用于 RAG（检索增强生成）应用
-   * @param collectionName 集合名称
-   * @param k 检索文档数量，默认 5 个
-   * @param filter 可选的过滤条件
-   * @returns LangChain 检索器实例
-   */
-  async getRetriever(collectionName: string, k: number = 5, filter?: any) {
-    const vectorStore = await this.getVectorStore(collectionName)
-    const options: any = { k }
-    if (filter) {
-      options.filter = filter
-    }
-    // 返回检索器，可以直接用于 LangChain 的链式操作
-    return vectorStore.asRetriever(options)
   }
 }
 
