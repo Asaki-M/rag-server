@@ -6,6 +6,7 @@ import {
   createKnowledge,
   deleteKnowledge,
   queryKnowledgeCollections,
+  searchDocuments,
   updateKnowledge,
 } from '../controller/knowledgeBase.js'
 
@@ -16,5 +17,6 @@ knowledgeBaseRouter.get('/collections', queryKnowledgeCollections)
 knowledgeBaseRouter.put('/:collectionName', updateKnowledge)
 knowledgeBaseRouter.delete('/:collectionName', deleteKnowledge)
 knowledgeBaseRouter.post('/:collectionName/documents', addDocumentsToKnowledgeBase)
+knowledgeBaseRouter.post('/:collectionName/search', searchDocuments)
 
 export default knowledgeBaseRouter

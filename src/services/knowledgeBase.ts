@@ -1,7 +1,7 @@
 import type { Document } from '@langchain/core/documents'
+import type { Collection } from 'chromadb'
 import type { CreateKnowledgeCollectionParams, UpdateKnowledgeCollectionParams } from '../types/index.js'
 import { TaskType } from '@google/generative-ai'
-import { Chroma } from '@langchain/community/vectorstores/chroma'
 import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai'
 import { CloudClient } from 'chromadb'
 import { v4 as uuidv4 } from 'uuid'
@@ -14,7 +14,7 @@ const logger = createLogger('KnowledgeBaseService')
 /**
  * 知识库服务类
  * 提供知识库的创建、管理、文档添加和检索功能
- * 基于 LangChain 和 ChromaDB 实现向量存储和相似性搜索
+ * 完全基于 ChromaDB CloudClient 实现
  */
 class KnowledgeBaseService {
   private readonly embeddings = new GoogleGenerativeAIEmbeddings({
@@ -29,8 +29,8 @@ class KnowledgeBaseService {
     database: config.chroma.database,
   })
 
-  // 向量存储缓存，避免重复创建相同的向量存储实例
-  private vectorStoreCache = new Map<string, Chroma>()
+  // 集合缓存，避免重复获取相同的集合实例
+  private collectionCache = new Map<string, Collection>()
 
   /**
    * 构建集合名称
@@ -44,30 +44,31 @@ class KnowledgeBaseService {
   }
 
   /**
-   * 获取向量存储实例
-   * 使用缓存机制提高性能，避免重复创建相同集合的向量存储
+   * 获取集合实例
+   * 使用缓存机制提高性能，避免重复获取相同集合
    * @param collectionName 集合名称
-   * @returns LangChain Chroma 向量存储实例
+   * @returns ChromaDB 集合实例
    */
-  private async getVectorStore(collectionName: string): Promise<Chroma> {
-    // 检查缓存中是否已存在该集合的向量存储
-    if (this.vectorStoreCache.has(collectionName)) {
-      return this.vectorStoreCache.get(collectionName)!
+  private async getCollection(collectionName: string): Promise<Collection> {
+    // 检查缓存中是否已存在该集合
+    if (this.collectionCache.has(collectionName)) {
+      return this.collectionCache.get(collectionName)!
     }
 
-    // 创建新的 LangChain Chroma 向量存储实例
-    const vectorStore = new Chroma(this.embeddings, {
-      collectionName,
-      chromaCloudAPIKey: config.chroma.apiKey,
-      clientParams: {
-        tenant: config.chroma.tenant,
-        database: config.chroma.database,
+    // 获取集合实例并配置嵌入函数
+    const collection = await this.chromaClient.getCollection({
+      name: collectionName,
+      embeddingFunction: {
+        // 定义嵌入函数，将文本转换为向量
+        generate: async (texts: string[]) => {
+          return this.embeddings.embedDocuments(texts)
+        },
       },
     })
 
-    // 将实例存入缓存
-    this.vectorStoreCache.set(collectionName, vectorStore)
-    return vectorStore
+    // 将集合实例存入缓存
+    this.collectionCache.set(collectionName, collection)
+    return collection
   }
 
   /**
@@ -90,6 +91,12 @@ class KnowledgeBaseService {
           created: now.toISOString(), // 创建时间
           description: description ?? '', // 知识库描述
         },
+        embeddingFunction: {
+          // 定义嵌入函数，将文本转换为向量
+          generate: async (texts: string[]) => {
+            return this.embeddings.embedDocuments(texts)
+          },
+        },
       })
 
       logger.log(`${name} 知识库集合创建成功.`)
@@ -106,7 +113,7 @@ class KnowledgeBaseService {
    * 获取当前数据库中所有可用的知识库集合列表
    * @returns 集合列表数组
    */
-  async queryKnowledgeCollections(): Promise<any[]> {
+  async queryKnowledgeCollections(): Promise<Collection[]> {
     try {
       return await this.chromaClient.listCollections()
     }
@@ -149,7 +156,7 @@ class KnowledgeBaseService {
       await collection.modify({ metadata: newMetadata })
 
       // 清除该集合的缓存，确保下次获取最新信息
-      this.vectorStoreCache.delete(name)
+      this.collectionCache.delete(name)
 
       logger.log(`${name} 知识库集合修改成功.`)
       return true
@@ -172,7 +179,7 @@ class KnowledgeBaseService {
       await this.chromaClient.deleteCollection({ name: collectionName })
 
       // 清除该集合的缓存
-      this.vectorStoreCache.delete(collectionName)
+      this.collectionCache.delete(collectionName)
 
       logger.log(`${collectionName} 知识库集合删除成功.`)
       return true
@@ -192,26 +199,29 @@ class KnowledgeBaseService {
    */
   async addDocumentsToKnowledgeBase(collectionName: string, documents: Document[]): Promise<boolean> {
     try {
-      // 获取对应的向量存储实例
-      const vectorStore = await this.getVectorStore(collectionName)
+      // 获取对应的集合实例
+      const collection = await this.getCollection(collectionName)
 
-      // 预处理文档，确保每个文档都有适当的元数据
-      const processedDocuments = documents.map(doc => ({
-        ...doc,
-        metadata: Object.keys(doc.metadata).length === 0
-          ? {
-              ...doc.metadata,
-              createdAt: new Date().toISOString(), // 添加创建时间
-            }
-          : doc.metadata,
-      }))
-
-      // 为每个文档生成唯一标识符
+      // 准备文档数据
       const ids = documents.map(() => uuidv4())
+      const documentsText = documents.map(doc => doc.pageContent)
+      const metadatas = documents.map((doc) => {
+        // 确保每个文档都有适当的元数据
+        if (Object.keys(doc.metadata).length === 0) {
+          return {
+            ...doc.metadata,
+            createdAt: new Date().toISOString(),
+          }
+        }
+        return doc.metadata
+      })
 
-      // 使用 LangChain 的 addDocuments 方法添加文档
-      // 这会自动处理文档的向量化和存储
-      await vectorStore.addDocuments(processedDocuments, { ids })
+      // 使用 ChromaDB 原生方法添加文档
+      await collection.add({
+        ids,
+        documents: documentsText,
+        metadatas,
+      })
 
       logger.log(`成功将文档添加到 ${collectionName} 知识库集合。`)
       return true
@@ -233,9 +243,33 @@ class KnowledgeBaseService {
    */
   async searchSimilarDocuments(collectionName: string, query: string, k: number = 5, filter?: Record<string, any>): Promise<Document[]> {
     try {
-      const vectorStore = await this.getVectorStore(collectionName)
-      // 使用向量相似性搜索找到最相关的文档
-      return await vectorStore.similaritySearch(query, k, filter)
+      const collection = await this.getCollection(collectionName)
+
+      // 将查询文本转换为向量
+      const queryEmbedding = await this.embeddings.embedQuery(query)
+
+      // 执行向量相似性搜索
+      const results = await collection.query({
+        queryEmbeddings: [queryEmbedding],
+        nResults: k,
+        ...(filter && { where: filter }),
+      })
+
+      // 转换为 LangChain Document 格式
+      const documents: Document[] = []
+      if (results.documents && results.documents[0] && results.metadatas && results.metadatas[0]) {
+        for (let i = 0; i < results.documents[0].length; i++) {
+          const doc = results.documents[0][i]
+          const metadata = results.metadatas[0][i]
+          if (doc) {
+            documents.push({
+              pageContent: doc,
+              metadata: metadata || {},
+            })
+          }
+        }
+      }
+      return documents
     }
     catch (error) {
       logger.error('相似文档搜索失败', error)
@@ -252,9 +286,9 @@ class KnowledgeBaseService {
    */
   async deleteDocuments(collectionName: string, ids: string[]): Promise<boolean> {
     try {
-      const vectorStore = await this.getVectorStore(collectionName)
+      const collection = await this.getCollection(collectionName)
       // 根据 ID 删除指定文档
-      await vectorStore.delete({ ids })
+      await collection.delete({ ids })
 
       logger.log(`成功从 ${collectionName} 删除 ${ids.length} 个文档。`)
       return true
@@ -262,6 +296,24 @@ class KnowledgeBaseService {
     catch (error) {
       logger.error(`从 ${collectionName} 删除文档失败`, error)
       return false
+    }
+  }
+
+  /**
+   * 获取集合统计信息
+   * 获取指定集合的文档数量等统计信息
+   * @param collectionName 集合名称
+   * @returns 集合统计信息
+   */
+  async getCollectionStats(collectionName: string): Promise<{ count: number } | null> {
+    try {
+      const collection = await this.getCollection(collectionName)
+      const count = await collection.count()
+      return { count }
+    }
+    catch (error) {
+      logger.error(`获取集合 ${collectionName} 统计信息失败`, error)
+      return null
     }
   }
 }
