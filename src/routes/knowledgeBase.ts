@@ -4,6 +4,7 @@ import { Router } from 'express'
 import {
   addDocumentsToKnowledgeBase,
   createKnowledge,
+  deleteDocuments,
   deleteKnowledge,
   queryKnowledgeCollections,
   searchDocuments,
@@ -17,6 +18,7 @@ knowledgeBaseRouter.get('/collections', queryKnowledgeCollections)
 knowledgeBaseRouter.put('/:collectionName', updateKnowledge)
 knowledgeBaseRouter.delete('/:collectionName', deleteKnowledge)
 knowledgeBaseRouter.post('/:collectionName/documents', addDocumentsToKnowledgeBase)
+knowledgeBaseRouter.delete('/:collectionName/documents', deleteDocuments)
 knowledgeBaseRouter.post('/:collectionName/search', searchDocuments)
 
 export default knowledgeBaseRouter
