@@ -6,6 +6,11 @@
   "rewrites": [
     { "source": "/(.*)", "destination": "/src/index.ts" }
   ],
+  "functions": {
+    "src/**/*": {
+      "excludeFiles": "{node_modules/**}"
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",
