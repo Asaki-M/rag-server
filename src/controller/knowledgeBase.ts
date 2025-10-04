@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express'
 import { Document } from '@langchain/core/documents'
 import knowledgeBaseService from '../services/knowledgeBase.js'
+import { rerankByLangSearch } from '../services/langSearch.js'
 
 export async function createKnowledge(req: Request, res: Response, next: NextFunction) {
   try {
@@ -113,11 +114,24 @@ export async function searchDocuments(req: Request, res: Response, next: NextFun
       return
     }
 
-    const documents = await knowledgeBaseService.searchSimilarDocuments(collectionName, query, k, filter)
-    res.status(200).json({
-      success: true,
-      documents,
+    const similarDocuments = await knowledgeBaseService.searchSimilarDocuments(collectionName, query, k, filter)
+    const documents = await rerankByLangSearch({
+      documents: similarDocuments.map(item => item.pageContent),
+      topN: 3,
+      query,
     })
+    if (documents) {
+      res.status(200).json({
+        success: true,
+        documents,
+      })
+    }
+    else {
+      res.status(500).json({
+        success: false,
+        msg: 'Error',
+      })
+    }
   }
   catch (error) {
     next(error)

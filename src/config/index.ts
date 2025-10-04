@@ -15,6 +15,10 @@ interface Config {
     tenant: string
     database: string
   }
+  langsearch: {
+    apiKey: string
+    model: string
+  }
 }
 
 const config: Config = {
@@ -27,6 +31,10 @@ const config: Config = {
     apiKey: process.env['CHROMA_API_KEY'] ?? '',
     tenant: process.env['CHROMA_TENANT'] ?? '',
     database: process.env['CHROMA_DATABASE'] ?? '',
+  },
+  langsearch: {
+    apiKey: process.env['LANGSEARCH_API_KEY'] ?? '',
+    model: 'langsearch-reranker-v1',
   },
 }
 
