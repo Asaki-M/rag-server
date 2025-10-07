@@ -1,16 +1,17 @@
 {
   "version": 2,
+  "buildCommand": "pnpm build",
   "builds": [
     {
-      "src": "src/index.ts",
+      "src": "dist/index.js",
       "use": "@vercel/node",
       "config": {
         "maxLambdaSize": "50mb"
       }
     }
   ],
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/src/index.ts" }
+  "routes": [
+    { "src": "/(.*)", "dest": "dist/index.js" }
   ],
   "headers": [
     {
