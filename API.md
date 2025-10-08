@@ -118,3 +118,4 @@
 | text         | string | 是   | 要分割的文本内容                        |
 | chunkSize    | number | 否   | 分割块大小，默认为 100，必须是正整数    |
 | chunkOverlap | number | 否   | 块重叠大小，默认为 0，必须≥0且<chunkSize |
+| type | string | 否   | 使用 'llm' 分割文本还是其他，默认是 'langchain' |

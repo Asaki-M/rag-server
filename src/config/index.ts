@@ -9,6 +9,11 @@ interface Config {
   google: {
     apiKey: string
     embeddingModel: string
+    chatModel: string
+  }
+  openrouter: {
+    apiKey: string
+    model: string
   }
   chroma: {
     apiKey: string
@@ -26,6 +31,11 @@ const config: Config = {
   google: {
     apiKey: process.env['GOOGLE_API_KEY'] ?? '',
     embeddingModel: process.env['GOOGLE_EMBEDINNG_MODEL'] ?? 'gemini-embedding-001',
+    chatModel: process.env['GOOGLE_CHAT_MODEL'] ?? 'gemini-1.5-flash',
+  },
+  openrouter: {
+    apiKey: process.env['OPENROUTER_API_KEY'] ?? '',
+    model: process.env['OPENROUTER_MODEL'] ?? 'qwen/qwen3-30b-a3b:free',
   },
   chroma: {
     apiKey: process.env['CHROMA_API_KEY'] ?? '',

@@ -1,35 +1,9 @@
 import type { NextFunction, Request, Response } from 'express'
-import { Document } from '@langchain/core/documents'
-import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
-import { createLogger } from '../utils/logger.js'
-
-const logger = createLogger('SplitText')
-
-interface SplitTextProps {
-  text: string
-  chunkSize?: number
-  chunkOverlap?: number
-}
-
-async function splitTextByLangchain({ text, chunkSize = 100, chunkOverlap = 0 }: SplitTextProps) {
-  try {
-    const splitter = new RecursiveCharacterTextSplitter({
-      chunkSize,
-      chunkOverlap,
-    })
-    return await splitter.splitDocuments([
-      new Document({ pageContent: text }),
-    ])
-  }
-  catch (error) {
-    logger.error('Split Failed. ', error)
-    return []
-  }
-}
+import SplitTextService from '../services/splitText.js'
 
 export async function splitText(req: Request, res: Response, next: NextFunction) {
   try {
-    const { text, chunkSize, chunkOverlap } = req.body
+    const { text, chunkSize, chunkOverlap, type } = req.body
 
     if (typeof text !== 'string' || text.trim().length === 0) {
       res.status(400).send({ msg: '文本内容不能为空' })
@@ -51,7 +25,13 @@ export async function splitText(req: Request, res: Response, next: NextFunction)
       return
     }
 
-    const documents = await splitTextByLangchain({ text, chunkSize, chunkOverlap })
+    let documents = []
+    if (type === 'llm') {
+      documents = await SplitTextService.splitTextByLLM({ text, chunkSize, chunkOverlap })
+    }
+    else {
+      documents = await SplitTextService.splitTextByLangchain({ text, chunkSize, chunkOverlap })
+    }
     res.status(200).json(documents)
   }
   catch (error) {
