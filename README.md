@@ -1,5 +1,8 @@
 一个使用 TypeScript 编写的 Express 服务，用于构建检索增强生成（RAG）工作流。该项目负责在 Chroma Cloud 中管理知识库，调用 Google Generative AI 生成嵌入，并使用 LangSearch API 对检索结果进行重排，同时提供基于 LangChain 的文本切分工具，便于将原始文本拆分为可导入知识库的文档。
 
+## Develop Blog
+[`BLOG.md`](./BLOG.md)
+
 ### 功能特性
 - 通过 REST API 创建、更新、查询和删除基于 Chroma 的知识库。
 - 支持写入与删除文档，并在集合中执行语义相似度检索。
